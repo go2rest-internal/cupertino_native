@@ -23,6 +23,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     var symbols: [String] = []
     var sizes: [NSNumber] = [] // ignored; use system metrics
     var colors: [NSNumber] = [] // ignored; use tintColor
+    var badgeCounts: [Int?] = []
     var selectedIndex: Int = 0
     var isDark: Bool = false
     var tint: UIColor? = nil
@@ -36,6 +37,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       labels = (dict["labels"] as? [String]) ?? []
       symbols = (dict["sfSymbols"] as? [String]) ?? []
       sizes = (dict["sfSymbolSizes"] as? [NSNumber]) ?? []
+      if let badgeData = dict["badgeCounts"] as? [NSNumber?] {
+        badgeCounts = badgeData.map { $0?.intValue }
+      }
       colors = (dict["sfSymbolColors"] as? [NSNumber]) ?? []
       if let v = dict["selectedIndex"] as? NSNumber { selectedIndex = v.intValue }
       if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
@@ -64,7 +68,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         var image: UIImage? = nil
         if i < symbols.count { image = UIImage(named: symbols[i]) }
         let title = (i < labels.count) ? labels[i] : nil
-        items.append(UITabBarItem(title: title, image: image, selectedImage: image))
+        let badgeCount = (i < badgeCounts.count) ? badgeCounts[i] : nil
+        let badgeCountItem: String?
+        if let count = badgeCount, count > 0 {
+          badgeCountItem = count > 99 ? "99+" : String(count)
+        }
+        items.append(UITabBarItem(title: title, image: image, selectedImage: image, badgeValue: badgeCountItem))
       }
       return items
     }
@@ -163,6 +172,10 @@ channel.setMethodCallHandler { [weak self] call, result in
       case "setItems":
         if let args = call.arguments as? [String: Any] {
           let labels = (args["labels"] as? [String]) ?? []
+          var badgeCounts: [Int?] = []
+          if let badgeData = args["badgeCounts"] as? [NSNumber?] {
+            badgeCounts = badgeData.map { $0?.intValue }
+          }
           let symbols = (args["sfSymbols"] as? [String]) ?? []
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
           self.currentLabels = labels
@@ -173,7 +186,12 @@ channel.setMethodCallHandler { [weak self] call, result in
               var image: UIImage? = nil
               if i < symbols.count { image = UIImage(named: symbols[i]) }
               let title = (i < labels.count) ? labels[i] : nil
-              items.append(UITabBarItem(title: title, image: image, selectedImage: image))
+              let badgeCount = (i < badgeCounts.count) ? badgeCounts[i] : nil
+              let badgeCountItem: String?
+              if let count = badgeCount, count > 0 {
+                badgeCountItem = count > 99 ? "99+" : String(count)
+              }
+              items.append(UITabBarItem(title: title, image: image, selectedImage: image, badgeValue: badgeCountItem))
             }
             return items
           }

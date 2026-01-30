@@ -31,6 +31,8 @@ class CNSymbol {
   /// Whether to enable the built-in gradient when available.
   final bool? gradient; // prefer built-in gradient when available
 
+  final int? badge; // prefer built-in gradient when available
+
   /// Creates a symbol description for native rendering.
   const CNSymbol(
     this.name, {
@@ -39,5 +41,6 @@ class CNSymbol {
     this.paletteColors,
     this.mode,
     this.gradient,
+    this.badge,
   });
 }

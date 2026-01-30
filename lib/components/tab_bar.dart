@@ -133,11 +133,15 @@ class _CNTabBarState extends State<CNTabBar> {
     final colors = widget.items
         .map((e) => resolveColorToArgb(e.icon?.color, context))
         .toList();
+    final badgeCounts = widget.items
+        .map((e) => (e.icon?.badge))
+        .toList();
 
     final creationParams = <String, dynamic>{
       'labels': labels,
       'sfSymbols': symbols,
       'sfSymbolSizes': sizes,
+      'badgeCounts': badgeCounts,
       'sfSymbolColors': colors,
       'selectedIndex': widget.currentIndex,
       'isDark': _isDark,
