@@ -69,11 +69,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         if i < symbols.count { image = UIImage(named: symbols[i]) }
         let title = (i < labels.count) ? labels[i] : nil
         let badgeCount = (i < badgeCounts.count) ? badgeCounts[i] : nil
-        let badgeCountItem: String?
+        let item = UITabBarItem(
+            title: title,
+            image: image,
+            selectedImage: image
+        )
         if let count = badgeCount, count > 0 {
-          badgeCountItem = count > 99 ? "99+" : String(count)
+            item.badgeValue = count > 99 ? "99+" : String(count)
+        }else{
+            item.badgeValue = nil
         }
-        items.append(UITabBarItem(title: title, image: image, selectedImage: image, badgeValue: badgeCountItem))
+        items.append(item)
       }
       return items
     }
@@ -187,11 +193,17 @@ channel.setMethodCallHandler { [weak self] call, result in
               if i < symbols.count { image = UIImage(named: symbols[i]) }
               let title = (i < labels.count) ? labels[i] : nil
               let badgeCount = (i < badgeCounts.count) ? badgeCounts[i] : nil
-              let badgeCountItem: String?
+              let item = UITabBarItem(
+                  title: title,
+                  image: image,
+                  selectedImage: image
+              )
               if let count = badgeCount, count > 0 {
-                badgeCountItem = count > 99 ? "99+" : String(count)
+                  item.badgeValue = count > 99 ? "99+" : String(count)
+              }else{
+                  item.badgeValue = nil
               }
-              items.append(UITabBarItem(title: title, image: image, selectedImage: image, badgeValue: badgeCountItem))
+              items.append(item)
             }
             return items
           }
