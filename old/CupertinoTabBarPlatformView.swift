@@ -21,10 +21,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
 
     var labels: [String] = []
     var symbols: [String] = []
-    var sizes: [NSNumber] = []
-    var colors: [NSNumber] = []
+    var sizes: [NSNumber] = [] // ignored; use system metrics
+    var colors: [NSNumber] = [] // ignored; use tintColor
     var badgeCounts: [Int?] = []
     var selectedIndex: Int = 0
+    var isDark: Bool = false
     var tint: UIColor? = nil
     var bg: UIColor? = nil
     var split: Bool = false
@@ -41,7 +42,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       colors = (dict["sfSymbolColors"] as? [NSNumber]) ?? []
       if let v = dict["selectedIndex"] as? NSNumber { selectedIndex = v.intValue }
-      // Игнорируем isDark из Flutter - всегда используем тёмную тему
+      if let v = dict["isDark"] as? NSNumber { isDark = v.boolValue }
       if let style = dict["style"] as? [String: Any] {
         if let n = style["tint"] as? NSNumber { tint = Self.colorFromARGB(n.intValue) }
         if let n = style["backgroundColor"] as? NSNumber { bg = Self.colorFromARGB(n.intValue) }
@@ -49,27 +50,18 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       if let s = dict["split"] as? NSNumber { split = s.boolValue }
       if let rc = dict["rightCount"] as? NSNumber { rightCount = rc.intValue }
       if let sp = dict["splitSpacing"] as? NSNumber { splitSpacingVal = CGFloat(truncating: sp) }
+      // content insets controlled by Flutter padding; keep zero here
     }
 
     super.init()
 
     container.backgroundColor = .clear
-    // ✅ ВСЕГДА устанавливаем тёмную тему
-    if #available(iOS 13.0, *) {
-      container.overrideUserInterfaceStyle = .dark
-    }
+    if #available(iOS 13.0, *) { container.overrideUserInterfaceStyle = isDark ? .dark : .light }
 
-    // ✅ Создаём тёмную appearance
     let appearance: UITabBarAppearance? = {
-      if #available(iOS 13.0, *) {
-        let ap = UITabBarAppearance()
-        ap.configureWithOpaqueBackground() // Используем непрозрачный фон
-        ap.backgroundColor = bg ?? UIColor.systemBackground // Тёмный фон
-        return ap
-      }
-      return nil
-    }()
-    
+    if #available(iOS 13.0, *) { let ap = UITabBarAppearance(); ap.configureWithDefaultBackground(); return ap }
+    return nil
+  }()
     func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
       var items: [UITabBarItem] = []
       for i in range {
@@ -91,7 +83,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       }
       return items
     }
-    
     let count = max(labels.count, symbols.count)
     if split && count > rightCount {
       let leftEnd = count - rightCount
@@ -101,26 +92,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       left.translatesAutoresizingMaskIntoConstraints = false
       right.translatesAutoresizingMaskIntoConstraints = false
       left.delegate = self; right.delegate = self
-      
-      // ✅ Устанавливаем тёмный стиль для обоих баров
-      if #available(iOS 13.0, *) {
-        left.overrideUserInterfaceStyle = .dark
-        right.overrideUserInterfaceStyle = .dark
-      }
-      
       if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
-      if let ap = appearance {
-        if #available(iOS 13.0, *) {
-          left.standardAppearance = ap
-          right.standardAppearance = ap
-          if #available(iOS 15.0, *) {
-            left.scrollEdgeAppearance = ap
-            right.scrollEdgeAppearance = ap
-          }
-        }
-      }
-      
+      if let ap = appearance { if #available(iOS 13.0, *) { left.standardAppearance = ap; right.standardAppearance = ap } }
       left.items = buildItems(0..<leftEnd)
       right.items = buildItems(leftEnd..<count)
       if selectedIndex < leftEnd, let items = left.items {
@@ -132,12 +106,12 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         left.selectedItem = nil
       }
       container.addSubview(left); container.addSubview(right)
-      
+      // Compute content-fitting widths for both bars and apply symmetric spacing
       let spacing: CGFloat = splitSpacingVal
       let leftWidth = left.sizeThatFits(.zero).width + leftInset * 2
       let rightWidth = right.sizeThatFits(.zero).width + rightInset * 2
       let total = leftWidth + rightWidth + spacing
-      
+      // If total exceeds container, fall back to proportional widths
       if total > container.bounds.width {
         let rightFraction = CGFloat(rightCount) / CGFloat(count)
         NSLayoutConstraint.activate([
@@ -152,14 +126,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         ])
       } else {
         NSLayoutConstraint.activate([
+          // Right bar fixed width, pinned to trailing
           right.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -rightInset),
           right.topAnchor.constraint(equalTo: container.topAnchor),
           right.bottomAnchor.constraint(equalTo: container.bottomAnchor),
           right.widthAnchor.constraint(equalToConstant: rightWidth),
+          // Left bar fixed width, pinned to leading
           left.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: leftInset),
           left.topAnchor.constraint(equalTo: container.topAnchor),
           left.bottomAnchor.constraint(equalTo: container.bottomAnchor),
           left.widthAnchor.constraint(equalToConstant: leftWidth),
+          // Spacing between
           left.trailingAnchor.constraint(lessThanOrEqualTo: right.leadingAnchor, constant: -spacing),
         ])
       }
@@ -168,23 +145,9 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
       tabBar = bar
       bar.delegate = self
       bar.translatesAutoresizingMaskIntoConstraints = false
-      
-      // ✅ Устанавливаем тёмный стиль
-      if #available(iOS 13.0, *) {
-        bar.overrideUserInterfaceStyle = .dark
-      }
-      
       if let bg = bg { bar.barTintColor = bg }
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
-      if let ap = appearance {
-        if #available(iOS 13.0, *) {
-          bar.standardAppearance = ap
-          if #available(iOS 15.0, *) {
-            bar.scrollEdgeAppearance = ap
-          }
-        }
-      }
-      
+      if let ap = appearance { if #available(iOS 13.0, *) { bar.standardAppearance = ap; if #available(iOS 15.0, *) { bar.scrollEdgeAppearance = ap } } }
       bar.items = buildItems(0..<count)
       if selectedIndex >= 0, let items = bar.items, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
       container.addSubview(bar)
@@ -195,15 +158,14 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         bar.bottomAnchor.constraint(equalTo: container.bottomAnchor),
       ])
     }
-    
+    // Store split settings for future updates
     self.isSplit = split
     self.rightCountVal = rightCount
     self.currentLabels = labels
     self.currentSymbols = symbols
     self.leftInsetVal = leftInset
     self.rightInsetVal = rightInset
-    
-    channel.setMethodCallHandler { [weak self] call, result in
+channel.setMethodCallHandler { [weak self] call, result in
       guard let self = self else { result(nil); return }
       switch call.method {
       case "getIntrinsicSize":
@@ -213,7 +175,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         } else {
           result(["width": Double(self.container.bounds.width), "height": 50.0])
         }
-        
       case "setItems":
         if let args = call.arguments as? [String: Any] {
           let labels = (args["labels"] as? [String]) ?? []
@@ -225,7 +186,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
           self.currentLabels = labels
           self.currentSymbols = symbols
-          
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -247,7 +207,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             }
             return items
           }
-          
           let count = max(labels.count, symbols.count)
           if self.isSplit && count > self.rightCountVal, let left = self.tabBarLeft, let right = self.tabBarRight {
             let leftEnd = count - self.rightCountVal
@@ -267,33 +226,25 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             result(FlutterError(code: "state_error", message: "Tab bars not initialized", details: nil))
           }
         } else { result(FlutterError(code: "bad_args", message: "Missing items", details: nil)) }
-        
       case "setLayout":
         if let args = call.arguments as? [String: Any] {
           let split = (args["split"] as? NSNumber)?.boolValue ?? false
           let rightCount = (args["rightCount"] as? NSNumber)?.intValue ?? 1
+          // Insets are controlled by Flutter padding; keep stored zeros here
           let leftInset = self.leftInsetVal
           let rightInset = self.rightInsetVal
           if let sp = args["splitSpacing"] as? NSNumber { self.splitSpacingVal = CGFloat(truncating: sp) }
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
-          
+          // Remove existing bars
           self.tabBar?.removeFromSuperview(); self.tabBar = nil
           self.tabBarLeft?.removeFromSuperview(); self.tabBarLeft = nil
           self.tabBarRight?.removeFromSuperview(); self.tabBarRight = nil
-          
           let labels = self.currentLabels
           let symbols = self.currentSymbols
-          
-          // ✅ Создаём тёмную appearance для новых баров
           let appearance: UITabBarAppearance? = {
-            if #available(iOS 13.0, *) {
-              let ap = UITabBarAppearance()
-              ap.configureWithOpaqueBackground()
-              return ap
-            }
+            if #available(iOS 13.0, *) { let ap = UITabBarAppearance(); ap.configureWithDefaultBackground(); return ap }
             return nil
           }()
-          
           func buildItems(_ range: Range<Int>) -> [UITabBarItem] {
             var items: [UITabBarItem] = []
             for i in range {
@@ -304,7 +255,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             }
             return items
           }
-          
           let count = max(labels.count, symbols.count)
           if split && count > rightCount {
             let leftEnd = count - rightCount
@@ -314,35 +264,15 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             left.translatesAutoresizingMaskIntoConstraints = false
             right.translatesAutoresizingMaskIntoConstraints = false
             left.delegate = self; right.delegate = self
-            
-            // ✅ Устанавливаем тёмный стиль
-            if #available(iOS 13.0, *) {
-              left.overrideUserInterfaceStyle = .dark
-              right.overrideUserInterfaceStyle = .dark
-            }
-            
-            if let ap = appearance {
-              if #available(iOS 13.0, *) {
-                left.standardAppearance = ap
-                right.standardAppearance = ap
-                if #available(iOS 15.0, *) {
-                  left.scrollEdgeAppearance = ap
-                  right.scrollEdgeAppearance = ap
-                }
-              }
-            }
-            
             left.items = buildItems(0..<leftEnd)
             right.items = buildItems(leftEnd..<count)
             if selectedIndex < leftEnd, let items = left.items { left.selectedItem = items[selectedIndex]; right.selectedItem = nil }
             else if let items = right.items { let idx = selectedIndex - leftEnd; if idx >= 0 && idx < items.count { right.selectedItem = items[idx]; left.selectedItem = nil } }
             self.container.addSubview(left); self.container.addSubview(right)
-            
             let spacing: CGFloat = splitSpacingVal
             let leftWidth = left.sizeThatFits(.zero).width + leftInset * 2
             let rightWidth = right.sizeThatFits(.zero).width + rightInset * 2
             let total = leftWidth + rightWidth + spacing
-            
             if total > self.container.bounds.width {
               let rightFraction = CGFloat(rightCount) / CGFloat(count)
               NSLayoutConstraint.activate([
@@ -373,21 +303,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             self.tabBar = bar
             bar.delegate = self
             bar.translatesAutoresizingMaskIntoConstraints = false
-            
-            // ✅ Устанавливаем тёмный стиль
-            if #available(iOS 13.0, *) {
-              bar.overrideUserInterfaceStyle = .dark
-            }
-            
-            if let ap = appearance {
-              if #available(iOS 13.0, *) {
-                bar.standardAppearance = ap
-                if #available(iOS 15.0, *) {
-                  bar.scrollEdgeAppearance = ap
-                }
-              }
-            }
-            
             bar.items = buildItems(0..<count)
             if let items = bar.items, selectedIndex >= 0, selectedIndex < items.count { bar.selectedItem = items[selectedIndex] }
             self.container.addSubview(bar)
@@ -401,14 +316,15 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           self.isSplit = split; self.rightCountVal = rightCount; self.leftInsetVal = leftInset; self.rightInsetVal = rightInset
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing layout", details: nil)) }
-        
       case "setSelectedIndex":
         if let args = call.arguments as? [String: Any], let idx = (args["index"] as? NSNumber)?.intValue {
+          // Single bar
           if let bar = self.tabBar, let items = bar.items, idx >= 0, idx < items.count {
             bar.selectedItem = items[idx]
             result(nil)
             return
           }
+          // Split bars
           if let left = self.tabBarLeft, let leftItems = left.items {
             if idx < leftItems.count, idx >= 0 {
               left.selectedItem = leftItems[idx]
@@ -428,7 +344,6 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           }
           result(FlutterError(code: "bad_args", message: "Index out of range", details: nil))
         } else { result(FlutterError(code: "bad_args", message: "Missing index", details: nil)) }
-        
       case "setStyle":
         if let args = call.arguments as? [String: Any] {
           if let n = args["tint"] as? NSNumber {
@@ -445,12 +360,11 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
-        
-      // ✅ Игнорируем setBrightness - всегда остаёмся в тёмной теме
       case "setBrightness":
-        // Просто возвращаем успех, но ничего не меняем
-        result(nil)
-        
+        if let args = call.arguments as? [String: Any], let isDark = (args["isDark"] as? NSNumber)?.boolValue {
+          if #available(iOS 13.0, *) { self.container.overrideUserInterfaceStyle = isDark ? .dark : .light }
+          result(nil)
+        } else { result(FlutterError(code: "bad_args", message: "Missing isDark", details: nil)) }
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -460,15 +374,18 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
   func view() -> UIView { container }
 
   func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+    // Single bar case
     if let single = self.tabBar, single === tabBar, let items = single.items, let idx = items.firstIndex(of: item) {
       channel.invokeMethod("valueChanged", arguments: ["index": idx])
       return
     }
+    // Split left
     if let left = tabBarLeft, left === tabBar, let items = left.items, let idx = items.firstIndex(of: item) {
       tabBarRight?.selectedItem = nil
       channel.invokeMethod("valueChanged", arguments: ["index": idx])
       return
     }
+    // Split right
     if let right = tabBarRight, right === tabBar, let items = right.items, let idx = items.firstIndex(of: item), let left = tabBarLeft, let leftItems = left.items {
       tabBarLeft?.selectedItem = nil
       channel.invokeMethod("valueChanged", arguments: ["index": leftItems.count + idx])
