@@ -39,6 +39,21 @@ final class DarkGlassTabBar: UITabBar {
 
   private var appliedGlassTint: UIColor?
 
+  /// iOS 27+: затемняющий слой внутри самой стеклянной «пилюли» — поверх
+  /// материала стекла, но под иконками и индикатором выбора.
+  private let innerDimView: UIView = {
+    let v = UIView()
+    v.isUserInteractionEnabled = false
+    v.clipsToBounds = true
+    v.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    if #available(iOS 13.0, *) { v.layer.cornerCurve = .continuous }
+    return v
+  }()
+
+  #if DEBUG
+  private var didDumpHierarchy = false
+  #endif
+
   override init(frame: CGRect) {
     super.init(frame: frame)
     if #available(iOS 13.0, *) { overrideUserInterfaceStyle = .dark }
@@ -57,8 +72,16 @@ final class DarkGlassTabBar: UITabBar {
       backingView.removeFromSuperview()
       return
     }
+    #if DEBUG
+    dumpHierarchyOnce()
+    #endif
     updateBacking()
     tintGlassIfPossible()
+    if #available(iOS 27.0, *) {
+      updateInnerDim()
+    } else {
+      innerDimView.removeFromSuperview()
+    }
   }
 
   override func didMoveToSuperview() {
@@ -69,6 +92,7 @@ final class DarkGlassTabBar: UITabBar {
 
   override func removeFromSuperview() {
     backingView.removeFromSuperview()
+    innerDimView.removeFromSuperview()
     super.removeFromSuperview()
   }
 
@@ -143,11 +167,52 @@ final class DarkGlassTabBar: UITabBar {
     return best
   }
 
+  // MARK: - iOS 27: затемнение внутри стекла
+
+  /// На iOS 27 светлое стекло рисуется поверх подложки и всё равно выглядит
+  /// белым. Поэтому кладём полупрозрачный тёмный слой первым сабвью внутрь
+  /// «пилюли»: он лежит над материалом стекла, но под иконками/подписями и
+  /// индикатором выбора — фон темнеет, а активный таб остаётся светлее.
+  private func updateInnerDim() {
+    guard let platter = findPlatterView() else {
+      innerDimView.removeFromSuperview()
+      return
+    }
+    let host: UIView = (platter as? UIVisualEffectView)?.contentView ?? platter
+    if innerDimView.superview !== host || host.subviews.first !== innerDimView {
+      innerDimView.removeFromSuperview()
+      host.insertSubview(innerDimView, at: 0)
+    }
+    innerDimView.frame = host.bounds
+    let radius = platter.layer.cornerRadius > 0 ? platter.layer.cornerRadius : host.bounds.height / 2
+    innerDimView.layer.cornerRadius = min(radius, host.bounds.height / 2)
+    var alpha: CGFloat = 1
+    glassBackgroundColor.getRed(nil, green: nil, blue: nil, alpha: &alpha)
+    innerDimView.backgroundColor = glassBackgroundColor.withAlphaComponent(min(1, alpha + 0.2))
+  }
+
+  #if DEBUG
+  /// Один раз печатает иерархию таб-бара в консоль Xcode — пригодится, если
+  /// на новой версии iOS Apple снова поменяет внутренности.
+  private func dumpHierarchyOnce() {
+    guard !didDumpHierarchy, bounds.width > 0 else { return }
+    didDumpHierarchy = true
+    func dump(_ v: UIView, _ depth: Int) {
+      let pad = String(repeating: "  ", count: depth)
+      let effect = (v as? UIVisualEffectView).map { " effect=\(String(describing: $0.effect))" } ?? ""
+      NSLog("[DarkGlassTabBar] \(pad)\(type(of: v)) frame=\(v.frame) r=\(v.layer.cornerRadius)\(effect)")
+      for s in v.subviews where s !== backingView && s !== innerDimView { dump(s, depth + 1) }
+    }
+    NSLog("[DarkGlassTabBar] iOS \(UIDevice.current.systemVersion), platter=\(String(describing: findPlatterView().map { type(of: $0) }))")
+    dump(self, 0)
+  }
+  #endif
+
   private func allDescendants(of view: UIView) -> [UIView] {
     var result: [UIView] = []
     var stack = view.subviews
     while let v = stack.popLast() {
-      if v === backingView { continue }
+      if v === backingView || v === innerDimView { continue }
       result.append(v)
       stack.append(contentsOf: v.subviews)
     }
@@ -167,7 +232,10 @@ final class DarkGlassTabBar: UITabBar {
       // Тонируем стекло слабее подложки, иначе бар становится глухим.
       var alpha: CGFloat = 1
       glassBackgroundColor.getRed(nil, green: nil, blue: nil, alpha: &alpha)
-      glass.tintColor = glassBackgroundColor.withAlphaComponent(alpha * 0.4)
+      // На iOS 27 стекло в тёмной теме заметно светлее, поэтому тонируем сильнее.
+      let factor: CGFloat
+      if #available(iOS 27.0, *) { factor = 1.6 } else { factor = 0.4 }
+      glass.tintColor = glassBackgroundColor.withAlphaComponent(min(1, alpha * factor))
       platter.effect = glass
       appliedGlassTint = glassBackgroundColor
     }
