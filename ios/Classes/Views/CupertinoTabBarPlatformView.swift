@@ -4,9 +4,10 @@ import UIKit
 class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelegate {
   private let channel: FlutterMethodChannel
   private let container: UIView
-  private var tabBar: UITabBar?
-  private var tabBarLeft: UITabBar?
-  private var tabBarRight: UITabBar?
+  private var tabBar: DarkGlassTabBar?
+  private var tabBarLeft: DarkGlassTabBar?
+  private var tabBarRight: DarkGlassTabBar?
+  private var backgroundColorVal: UIColor? = nil
   private var isSplit: Bool = false
   private var rightCountVal: Int = 1
   private var currentLabels: [String] = []
@@ -52,6 +53,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     }
 
     super.init()
+    self.backgroundColorVal = bg
 
     container.backgroundColor = .clear
     // ✅ ВСЕГДА устанавливаем тёмную тему
@@ -95,8 +97,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
     let count = max(labels.count, symbols.count)
     if split && count > rightCount {
       let leftEnd = count - rightCount
-      let left = UITabBar(frame: .zero)
-      let right = UITabBar(frame: .zero)
+      let left = DarkGlassTabBar(frame: .zero)
+      let right = DarkGlassTabBar(frame: .zero)
       tabBarLeft = left; tabBarRight = right
       left.translatesAutoresizingMaskIntoConstraints = false
       right.translatesAutoresizingMaskIntoConstraints = false
@@ -108,7 +110,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         right.overrideUserInterfaceStyle = .dark
       }
       
-      if let bg = bg { left.barTintColor = bg; right.barTintColor = bg }
+      if let bg = bg {
+        left.barTintColor = bg; right.barTintColor = bg
+        left.glassBackgroundColor = bg; right.glassBackgroundColor = bg
+      }
       if #available(iOS 10.0, *), let tint = tint { left.tintColor = tint; right.tintColor = tint }
       if let ap = appearance {
         if #available(iOS 13.0, *) {
@@ -164,7 +169,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         ])
       }
     } else {
-      let bar = UITabBar(frame: .zero)
+      let bar = DarkGlassTabBar(frame: .zero)
       tabBar = bar
       bar.delegate = self
       bar.translatesAutoresizingMaskIntoConstraints = false
@@ -174,7 +179,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
         bar.overrideUserInterfaceStyle = .dark
       }
       
-      if let bg = bg { bar.barTintColor = bg }
+      if let bg = bg {
+        bar.barTintColor = bg
+        bar.glassBackgroundColor = bg
+      }
       if #available(iOS 10.0, *), let tint = tint { bar.tintColor = tint }
       if let ap = appearance {
         if #available(iOS 13.0, *) {
@@ -277,6 +285,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           if let sp = args["splitSpacing"] as? NSNumber { self.splitSpacingVal = CGFloat(truncating: sp) }
           let selectedIndex = (args["selectedIndex"] as? NSNumber)?.intValue ?? 0
           
+          let tabTint = (self.tabBar ?? self.tabBarLeft)?.tintColor
           self.tabBar?.removeFromSuperview(); self.tabBar = nil
           self.tabBarLeft?.removeFromSuperview(); self.tabBarLeft = nil
           self.tabBarRight?.removeFromSuperview(); self.tabBarRight = nil
@@ -289,6 +298,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             if #available(iOS 13.0, *) {
               let ap = UITabBarAppearance()
               ap.configureWithOpaqueBackground()
+              ap.backgroundColor = self.backgroundColorVal ?? UIColor.systemBackground
               return ap
             }
             return nil
@@ -308,8 +318,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           let count = max(labels.count, symbols.count)
           if split && count > rightCount {
             let leftEnd = count - rightCount
-            let left = UITabBar(frame: .zero)
-            let right = UITabBar(frame: .zero)
+            let left = DarkGlassTabBar(frame: .zero)
+            let right = DarkGlassTabBar(frame: .zero)
             self.tabBarLeft = left; self.tabBarRight = right
             left.translatesAutoresizingMaskIntoConstraints = false
             right.translatesAutoresizingMaskIntoConstraints = false
@@ -320,6 +330,10 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
               left.overrideUserInterfaceStyle = .dark
               right.overrideUserInterfaceStyle = .dark
             }
+            if let bg = self.backgroundColorVal {
+              left.glassBackgroundColor = bg; right.glassBackgroundColor = bg
+            }
+            if let tint = tabTint { left.tintColor = tint; right.tintColor = tint }
             
             if let ap = appearance {
               if #available(iOS 13.0, *) {
@@ -369,7 +383,7 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
               ])
             }
           } else {
-            let bar = UITabBar(frame: .zero)
+            let bar = DarkGlassTabBar(frame: .zero)
             self.tabBar = bar
             bar.delegate = self
             bar.translatesAutoresizingMaskIntoConstraints = false
@@ -378,6 +392,8 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
             if #available(iOS 13.0, *) {
               bar.overrideUserInterfaceStyle = .dark
             }
+            if let bg = self.backgroundColorVal { bar.glassBackgroundColor = bg }
+            if let tint = tabTint { bar.tintColor = tint }
             
             if let ap = appearance {
               if #available(iOS 13.0, *) {
@@ -439,9 +455,17 @@ class CupertinoTabBarPlatformView: NSObject, FlutterPlatformView, UITabBarDelega
           }
           if let n = args["backgroundColor"] as? NSNumber {
             let c = Self.colorFromARGB(n.intValue)
-            if let bar = self.tabBar { bar.barTintColor = c }
-            if let left = self.tabBarLeft { left.barTintColor = c }
-            if let right = self.tabBarRight { right.barTintColor = c }
+            self.backgroundColorVal = c
+            for b in [self.tabBar, self.tabBarLeft, self.tabBarRight].compactMap({ $0 }) {
+              b.barTintColor = c
+              b.glassBackgroundColor = c
+              if #available(iOS 13.0, *) {
+                let ap = b.standardAppearance.copy()
+                ap.backgroundColor = c
+                b.standardAppearance = ap
+                if #available(iOS 15.0, *) { b.scrollEdgeAppearance = ap }
+              }
+            }
           }
           result(nil)
         } else { result(FlutterError(code: "bad_args", message: "Missing style", details: nil)) }
