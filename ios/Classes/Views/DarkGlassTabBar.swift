@@ -17,8 +17,9 @@ import UIKit
 /// На iOS < 26 класс ведёт себя как обычный UITabBar (там фон задаёт
 /// `UITabBarAppearance`).
 final class DarkGlassTabBar: UITabBar {
-  /// Цвет тёмной подложки под стеклом.
-  static let defaultGlassColor = UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 0.85)
+  /// Цвет тёмной подложки под стеклом. Полупрозрачный, чтобы контент
+  /// под баром слегка просвечивал сквозь стекло.
+  static let defaultGlassColor = UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 0.5)
 
   var glassBackgroundColor: UIColor = DarkGlassTabBar.defaultGlassColor {
     didSet {
@@ -163,7 +164,10 @@ final class DarkGlassTabBar: UITabBar {
             let current = platter.effect as? UIGlassEffect else { return }
       let glass = UIGlassEffect(style: .regular)
       glass.isInteractive = current.isInteractive
-      glass.tintColor = glassBackgroundColor
+      // Тонируем стекло слабее подложки, иначе бар становится глухим.
+      var alpha: CGFloat = 1
+      glassBackgroundColor.getRed(nil, green: nil, blue: nil, alpha: &alpha)
+      glass.tintColor = glassBackgroundColor.withAlphaComponent(alpha * 0.4)
       platter.effect = glass
       appliedGlassTint = glassBackgroundColor
     }
