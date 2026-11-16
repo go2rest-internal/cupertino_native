@@ -19,7 +19,7 @@ import UIKit
 final class DarkGlassTabBar: UITabBar {
   /// Цвет тёмной подложки под стеклом. Полупрозрачный, чтобы контент
   /// под баром слегка просвечивал сквозь стекло.
-  static let defaultGlassColor = UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 0.5)
+  static let defaultGlassColor = UIColor(red: 0.07, green: 0.07, blue: 0.08, alpha: 0.35)
 
   var glassBackgroundColor: UIColor = DarkGlassTabBar.defaultGlassColor {
     didSet {
